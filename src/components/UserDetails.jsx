@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { UserContext } from "../context/UserContext";
-import { Avatar, Button, useDisclosure } from "@chakra-ui/react";
+import { Avatar, Button, Textarea, useDisclosure } from "@chakra-ui/react";
 import { MdDelete } from "react-icons/md";
 import { TbEdit } from "react-icons/tb";
 import {
@@ -13,9 +13,19 @@ import {
   AlertDialogOverlay,
   AlertDialogCloseButton,
 } from "@chakra-ui/react";
+import {
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+} from "@chakra-ui/react";
 const UserDetails = () => {
   const { id } = useParams();
   const deleteModal = useDisclosure();
+  const updateModal = useDisclosure();
   const cancelRef = React.useRef();
   const [userPosts, setUserPosts] = useState([]);
   const [userAlbums, setUserAlbums] = useState([]);
@@ -25,6 +35,12 @@ const UserDetails = () => {
   const [comments, setComments] = useState({});
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [newCommentText, setNewCommentText] = useState("");
+  const [modalPostData, setModalPostData] = useState({
+    title: "",
+    body: "",
+    id: null,
+  });
+  const [modalDelete, setModalDelete] = useState();
   const handleCreateComment = async (postId) => {
     const newComment = {
       postId: postId,
@@ -59,13 +75,49 @@ const UserDetails = () => {
     })
       .then((response) => {
         console.log("Post deleted successfully:", postId);
-        deleteModal.onClose();
+
         setUserPosts((prevPosts) =>
           prevPosts.filter((post) => post.id !== postId)
         );
+        deleteModal.onClose();
       })
       .catch((error) => console.error("Error deleting post:", error));
   };
+  const handleUpdatePost = async () => {
+    try {
+      const updatedPost = {
+        // ...post, // Assuming `post` contains the ID of the post being updated
+        title: modalPostData.title,
+        body: modalPostData.body,
+        id: modalPostData.id,
+      };
+      console.log(updatedPost);
+
+      const response = await fetch(
+        `https://jsonplaceholder.typicode.com/posts/${updatedPost.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(updatedPost),
+          headers: {
+            "Content-type": "application/json; charset=UTF-8",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update post.");
+      }
+
+      console.log("Post updated successfully:", updatedPost);
+      // Update the local state or perform any other actions upon successful update
+      // For example, close the modal
+      updateModal.onClose();
+    } catch (error) {
+      console.error("Error updating post:", error);
+      // Handle error (e.g., display an error message)
+    }
+  };
+
   useEffect(() => {
     fetch(`https://jsonplaceholder.typicode.com/posts?userId=${id}`)
       .then((response) => response.json())
@@ -89,7 +141,6 @@ const UserDetails = () => {
       <h2 className="text-2xl font-bold mb-4">
         {userDetails ? userDetails.name : "Loading..."}
       </h2>
-
       {userDetails && (
         <>
           <section className="mb-6 m-auto flex flex-col items-center">
@@ -124,7 +175,7 @@ const UserDetails = () => {
                       <li key={post.id} className="mb-4 w-[400px]">
                         <h4 className="text-lg font-semibold">{post.title}</h4>
                         <p className="text-gray-600">{post.body}</p>
-                        {/* Add comments section for each post here */}
+
                         {comments[post.id] && (
                           <ul>
                             {comments[post.id].map((comment) => (
@@ -165,17 +216,77 @@ const UserDetails = () => {
                           </button>
                         )}
                       </li>
+                      <Modal
+                        isOpen={updateModal.isOpen}
+                        onClose={updateModal.onClose}
+                      >
+                        <ModalOverlay />
+                        <ModalContent>
+                          <ModalHeader>Update Post</ModalHeader>
+                          <ModalCloseButton />
+                          <ModalBody>
+                            <Textarea
+                              placeholder={"Enter Title"}
+                              value={modalPostData.title}
+                              onChange={(e) =>
+                                setModalPostData({
+                                  ...modalPostData,
+                                  title: e.target.value,
+                                })
+                              }
+                            ></Textarea>
+                            <Textarea
+                              placeholder={"Enter Body"}
+                              onChange={(e) =>
+                                setModalPostData({
+                                  ...modalPostData,
+                                  body: e.target.value,
+                                })
+                              }
+                              value={modalPostData.body}
+                            ></Textarea>
+                          </ModalBody>
+                          <ModalFooter>
+                            <Button
+                              colorScheme="blue"
+                              mr={3}
+                              onClick={updateModal.onClose}
+                            >
+                              No
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleUpdatePost(post.id)}
+                            >
+                              Update
+                            </Button>
+                          </ModalFooter>
+                        </ModalContent>
+                      </Modal>
                       <div className="flex gap-1 self-start mt-2">
                         <MdDelete
                           size={20}
-                          onClick={deleteModal.onOpen}
+                          onClick={() => {
+                            deleteModal.onOpen();
+                            setModalDelete(post.id);
+                          }}
                           className="cursor-pointer"
                         />
-                        <TbEdit size={20} className="cursor-pointer" />
+                        <TbEdit
+                          size={20}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setModalPostData({
+                              title: post.title,
+                              body: post.body,
+                              id: post.id,
+                            });
+                            updateModal.onOpen();
+                          }}
+                        />
                       </div>
                       <AlertDialog
                         motionPreset="slideInBottom"
-                        // leastDestructiveRef={cancelRef}
                         onClose={deleteModal.onClose}
                         isOpen={deleteModal.isOpen}
                         isCentered
@@ -183,9 +294,7 @@ const UserDetails = () => {
                         <AlertDialogOverlay />
 
                         <AlertDialogContent>
-                          <AlertDialogHeader>
-                            Discard Changes?
-                          </AlertDialogHeader>
+                          <AlertDialogHeader>Delete Post?</AlertDialogHeader>
                           <AlertDialogCloseButton />
                           <AlertDialogBody>
                             Are you sure you want to delete the post?
@@ -200,7 +309,7 @@ const UserDetails = () => {
                             <Button
                               colorScheme="red"
                               ml={3}
-                              onClick={() => handleDeletePost(post.id)}
+                              onClick={() => handleDeletePost(modalDelete)}
                             >
                               Yes
                             </Button>
@@ -214,7 +323,6 @@ const UserDetails = () => {
             )}
           </section>
 
-          {/* User Albums */}
           <section>
             <div className="flex items-center justify-between w-[400px] m-auto">
               <h3 className="text-lg font-semibold">User Albums</h3>
@@ -227,7 +335,6 @@ const UserDetails = () => {
             </div>
             {!isAlbumsCollapsed && (
               <div className="w-[400px] m-auto mt-4">
-                {/* Add album list here */}
                 <ul>
                   {userAlbums.map((album) => (
                     <Link to={`/albums/${album.id}`} key={album.id}>
